@@ -543,7 +543,7 @@ print(f'Compute time per batch : {compute_ms:.1f} ms')
 python scripts/03_dataloader_benchmark.py
 ```
 
-### 4.2 AICR Storage: Where Your Data Lives Matters
+### 4.2 AICR Storage: Where Your Data Lives Matters (need to check if /home is slower than /projects!!!)
 
 On AICR, as on all HPC clusters, not all storage is equal.  Training from the
 wrong tier is one of the easiest efficiency problems to fix.
