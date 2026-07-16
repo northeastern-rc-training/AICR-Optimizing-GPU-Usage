@@ -69,12 +69,12 @@ echo ""
 conda create -y -n "$ENV_NAME" python=3.11
 
 # ── Install packages ──────────────────────────────────────────────────────────
-echo "Installing PyTorch (CUDA 12.x build) and dependencies ..."
+echo "Installing PyTorch (CUDA 12.8 build) and dependencies ..."
 conda run -n "$ENV_NAME" pip install \
     torch \
     torchvision \
     torchaudio \
-    --index-url https://download.pytorch.org/whl/cu121
+    --index-url https://download.pytorch.org/whl/cu128
 
 echo "Installing profiling and monitoring tools ..."
 conda run -n "$ENV_NAME" pip install \

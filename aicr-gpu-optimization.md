@@ -46,9 +46,9 @@ You submitted a GPU job.  It ran.  It finished.
 
 But **was the GPU actually working?**
 
-Many GPU jobs on HPC clusters run at 20–40% of what the hardware is capable of.  For every hour of compute time, 30–40 minutes are wasted — the GPU is sitting idle, waiting.
+Many GPU jobs on HPC clusters do not utilize the GPU to what the hardware is capable of.  For every hour of compute time, a lot of time is wasted when the GPU is sitting idle, waiting.
 
-On AICR this matters more than on most clusters.  AICR's B200 and RTX PRO 6000 GPUs are among the fastest hardware available to academic researchers anywhere.  An idle B200 is roughly 2.5× more expensive to waste than an idle A100.  AICR is also shared across six universities — every idle allocation is time another researcher couldn't use.
+On AICR this matters more.  AICR's B200 and RTX PRO 6000 GPUs are among the fastest hardware available to academic researchers anywhere.  An idle B200 is roughly 2.5× more expensive to waste than an idle A100.  AICR is also shared across six universities — every idle allocation is time another researcher couldn't use.
 
 The good news: almost all inefficiencies share a small set of root causes.  Once you learn to **measure** your job rather than assume it is fine, fixes are usually one or two code changes.
 
@@ -56,16 +56,6 @@ The good news: almost all inefficiencies share a small set of root causes.  Once
 > **Measure before you change anything.  Profile first, optimize second.**
 
 Every section adds one measuring instrument to your toolkit.
-
----
-
-> 💡 **Presenter note:** Open a second terminal pane now.
-> SSH into your AICR devel session and run `watch -n 1 nvidia-smi`.
-> Keep that pane visible as each demo runs.  The audience sees GPU metrics
-> update live as scripts execute — this turns an abstract concept into a real
-> number changing on screen.
-
----
 
 ## Prerequisites — Getting the Training Materials
 
@@ -89,6 +79,16 @@ srun -p b200-devel -N 1 -n 1 -c 8 --mem=32G --gres=gpu:1 \
      --time=01:00:00 --pty bash
 ```
 
+---
+
+> 💡 **Presenter note:** Open a second terminal pane now.
+> SSH into an AICR devel session and run `watch -n 1 nvidia-smi`.
+> Keep that pane visible as each demo runs.  The audience sees GPU metrics
+> update live as scripts execute — this turns an abstract concept into a real
+> number changing on screen.
+
+---
+
 > 💡 **Question for the audience:** Why `srun` instead of `sbatch`?
 >
 > Answer: `srun` drops you into a live terminal on a compute node.  You can
@@ -99,17 +99,17 @@ srun -p b200-devel -N 1 -n 1 -c 8 --mem=32G --gres=gpu:1 \
 **Step 3 — Load modules and clone the training repo**
 
 ```bash
-module load cuda/13.1
+module load cuda/13.1.1
 module load miniforge3/25.3.0-3
 
 cd /scratch/$USER
-git clone git@github.com:northeastern-rc-training/AICR-Optimizing-GPU-Usage.git
-cd AICR-Optimizing-GPU-Usage
+git clone https://github.com/northeastern-rc-training/AICR-Optimizing-GPU-Usage.git
 ```
 
 **Step 4 — Set up the Python environment**
 
 ```bash
+cd AICR-Optimizing-GPU-Usage
 chmod +x setup_env.sh
 ./setup_env.sh
 source activate aicr_gpu_workshop
