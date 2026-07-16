@@ -62,11 +62,15 @@ echo "nvcc        : $(nvcc --version 2>/dev/null | head -1 || echo 'not loaded')
 echo ""
 
 # ── Create environment ────────────────────────────────────────────────────────
-echo "Creating conda environment: $ENV_NAME ..."
-echo "(This can take 3–5 minutes on first install)"
-echo ""
-
-conda create -y -n "$ENV_NAME" python=3.11
+if conda env list | awk '{print $1}' | grep -qx "$ENV_NAME"; then
+    echo "Environment '$ENV_NAME' already exists — skipping creation."
+    echo "(Delete it first with 'conda env remove -n $ENV_NAME' to rebuild from scratch.)"
+else
+    echo "Creating conda environment: $ENV_NAME ..."
+    echo "(This can take 3–5 minutes on first install)"
+    echo ""
+    conda create -y -n "$ENV_NAME" python=3.11
+fi
 
 # ── Install packages ──────────────────────────────────────────────────────────
 echo "Installing PyTorch (CUDA 12.8 build) and dependencies ..."
