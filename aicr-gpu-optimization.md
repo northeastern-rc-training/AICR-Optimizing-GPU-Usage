@@ -286,11 +286,6 @@ Two numbers matter most:
 - **GPU-Util 84%** — 84% of the past second had at least one GPU kernel running.  This is healthy.  Below 50%? We need to check something!
 - **24576 MiB / 196608 MiB** — memory allocated vs. total VRAM.  This is only 12% of the B200's 192 GB.  There is enormous headroom to increase batch size.
 
-> 💡 **B200 power note:** The B200's power cap is ~1000W — roughly 2.5× an A100.
-> When you first run a job and see a number like "387W", that is normal.  Do not
-> interpret high wattage as a problem; it means the GPU is working hard, which
-> is exactly what you want.
-
 > 💡 **Question for the audience:** If you saw `GPU-Util: 12%` and
 > `Memory: 91%`, what problem would you guess?
 >
