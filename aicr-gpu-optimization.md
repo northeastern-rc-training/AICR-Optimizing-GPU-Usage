@@ -46,7 +46,7 @@ You submitted a GPU job.  It ran.  It finished.
 
 But **was the GPU actually working?**
 
-Many GPU jobs on HPC clusters do not utilize the GPU to what the hardware is capable of.  For every hour of compute time, a lot of time is wasted when the GPU is sitting idle, waiting.
+Many GPU jobs on HPC clusters do not utilize the GPU to what the hardware is capable of.  A lot of time is wasted when the GPU is sitting idle, waiting.
 
 On AICR this matters more.  AICR's B200 and RTX PRO 6000 GPUs are among the fastest hardware available to academic researchers anywhere.  An idle B200 is roughly 2.5× more expensive to waste than an idle A100.  AICR is also shared across six universities — every idle allocation is time another researcher couldn't use.
 
@@ -79,14 +79,14 @@ srun -p b200-devel -N 1 -n 1 -c 8 --mem=32G --gres=gpu:1 \
      --time=01:00:00 --pty bash
 ```
 
----
+<!---
 
 > 💡 **Presenter note:** Open a second terminal pane now.
 > SSH into an AICR devel session and run `watch -n 1 nvidia-smi`.
 > Keep that pane visible as each demo runs.  The audience sees GPU metrics
 > update live as scripts execute — this turns an abstract concept into a real
 > number changing on screen.
-
+-->
 ---
 
 > 💡 **Question for the audience:** Why `srun` instead of `sbatch`?
@@ -188,7 +188,6 @@ A few things worth pausing on:
 
 - **`--mem=32G` is CPU RAM**, not GPU VRAM.  GPU VRAM is allocated automatically when SLURM gives you the GPU.
 - **`--cpus-per-task=8` matters more than it looks.**  DataLoader worker processes consume these CPU cores.  We revisit this in Section 4.
-- **`module load cuda/13.1`** must appear before Python runs, or `torch.cuda.is_available()` returns `False`.
 - Create the `logs/` directory before submitting, or SLURM will fail to write output files on some configurations.
 
 ### 1.3 Verifying GPU Allocation at Runtime
@@ -209,11 +208,14 @@ The script checks:
 
 > **Demo:** Run `python scripts/01_gpu_verify.py` and read the output together.
 
-> 💡 **Question for the audience:** If `torch.cuda.is_available()` returns
-> `False` on a b200-devel node, what is the most likely cause?
+> 💡 **Question for the audience:** `torch.cuda.is_available()` already returned
+> `True` — so why does the script still do a CPU → GPU → CPU tensor round-trip?
 >
-> Answer: The `cuda` module was not loaded.  `module load cuda/13.1` must
-> appear before Python starts.
+> Answer: `is_available()` only confirms PyTorch can *see* a GPU, not that it
+> can actually *use* it. A round-trip catches real failures that surface only
+> when you touch the device — a driver/runtime mismatch, an out-of-memory GPU
+> already saturated by another process, or ECC/hardware errors — before your
+> training job hits them 20 minutes in.
 
 ### 1.4 CUDA_VISIBLE_DEVICES
 
@@ -233,7 +235,7 @@ AICR runs a background process that monitors GPU utilisation.  **Jobs that hold
 a GPU without running kernels will be cancelled automatically.**
 
 This policy exists because AICR is a shared resource across six universities.
-A job that holds a B200 for hours while doing nothing is blocking researchers
+A job that holds a B200 for hours while doing nothing is blocking researchers at Northeastern and
 at partner institutions.
 
 **Practical implications:**
@@ -242,8 +244,9 @@ at partner institutions.
 - Run the verification script early.  If there is a module or environment problem, you will find out in seconds rather than losing your slot.
 - Profile in `b200-devel` (short interactive sessions) — not in `b200-batch`.
 
-> **Section 1 takeaway:** Verify your device, VRAM, and CUDA module load
-> before doing anything else.  Idle allocations on AICR get cancelled.
+> **Section 1 takeaway:** Verify your device, VRAM, and that the GPU is
+> actually usable before doing anything else.  Idle allocations on AICR get
+> cancelled.
 
 ---
 
@@ -280,7 +283,7 @@ watch -n 1 nvidia-smi
 
 Two numbers matter most:
 
-- **GPU-Util 84%** — 84% of the past second had at least one GPU kernel running.  This is healthy.  Below 50% is a warning sign.
+- **GPU-Util 84%** — 84% of the past second had at least one GPU kernel running.  This is healthy.  Below 50%? We need to check something!
 - **24576 MiB / 196608 MiB** — memory allocated vs. total VRAM.  This is only 12% of the B200's 192 GB.  There is enormous headroom to increase batch size.
 
 > 💡 **B200 power note:** The B200's power cap is ~1000W — roughly 2.5× an A100.
@@ -405,9 +408,9 @@ after 'Confirm >70% util'. Use Northeastern red for the bridge arrow.
 Clean minimal style."
 -->
 
-Rule of thumb: if your entire job runs in under 30 minutes in an interactive
+<!--Rule of thumb: if your entire job runs in under 30 minutes in an interactive
 session, there is no reason to use `sbatch`.  Switch to batch only when you
-have a tuned script that genuinely needs hours.
+have a tuned script that genuinely needs hours.-->
 
 ### 3.3 PyTorch Profiler
 
@@ -487,11 +490,11 @@ scp your_aicr_username@<aicr-login>:/scratch/$USER/profile_*.nsys-rep ./
 
 ---
 
-The most common cause of low GPU utilisation in training jobs is not bad model
-code.  It is a data pipeline that cannot keep up with the GPU.
+The most common cause of low GPU utilisation in training jobs is not necessarily a bad model
+code.  It potentially can also be a data pipeline that cannot keep up with the GPU.
 
 This is even more acute on AICR than on older clusters.  The B200 processes
-each batch faster than an A100 by a large margin.  If your DataLoader barely
+each batch faster than for example an A100 by a large margin.  If your DataLoader barely
 kept up on Explorer, it will definitely starve a B200.
 
 ### 4.1 The Factory Floor Analogy
@@ -543,17 +546,30 @@ print(f'Compute time per batch : {compute_ms:.1f} ms')
 python scripts/03_dataloader_benchmark.py
 ```
 
-### 4.2 AICR Storage: Where Your Data Lives Matters (need to check if /home is slower than /projects!!!)
+<!-- Section 4.2 (AICR Storage) commented out — kept for reference
 
-On AICR, as on all HPC clusters, not all storage is equal.  Training from the
-wrong tier is one of the easiest efficiency problems to fix.
+### 4.2 AICR Storage: Where Your Data Lives Matters
 
-| Storage | Speed | Notes |
-|---|---|---|
-| `/home/$USER` | Slowest | **Never train from here.**  100 GB quota, shared, slow.  Training from `/home` affects other users. |
-| `/scratch/$USER` | Good | 10 TB quota.  Good for large files and sequential reads.  **30-day purge** — move results out. |
-| `/work/neu/$PROJECT` | Moderate | Longer-term project storage.  Not subject to the 30-day purge.  Slower throughput than scratch. |
-| `$TMPDIR` | Fastest (if available) | Node-local storage.  Copy your dataset here at job start for best I/O performance.  **Check if available on your compute node.** |
+On AICR, `/home`, `/scratch`, and `/work` are all **NFS exports on the same
+server** (`storage0001.nfs`) — so choose your tier primarily by **quota, purge
+policy, and contention**, not by an assumed raw-speed ranking.  The exports may
+sit on different backends, but don't assume one NFS tier is dramatically faster
+than another without measuring (see *Measuring tier speed* below).
+
+The real speed lever is **getting off NFS entirely**: copy your dataset to
+node-local `$TMPDIR` at job start.  That, plus using sequential-read file
+formats, matters far more than which NFS tier you pick.
+
+| Storage | Quota | Purge | Best for |
+|---|---|---|---|
+| `/home/$USER` | ~100 GB, shared | None | Code, configs, small files.  **Don't train from here** — shared, high metadata contention. |
+| `/scratch/$USER` | ~10 TB | **30-day purge** | Active training datasets and large sequential reads.  Move results out before purge. |
+| `/work/neu/$PROJECT` | Project allocation | None | Longer-term project data and results.  Purge-safe. |
+| `$TMPDIR` | Node-local (varies) | End of job | **Fastest — not NFS.**  `rsync` your dataset here at job start.  **Check availability on your compute node.** |
+
+> ℹ️ Quotas above are *per-user allocations*, separate from the raw filesystem
+> capacity you see in `df -h` (which shows the whole export, e.g. `/scratch` at
+> 2.7 PB).  Confirm your current quotas with the cluster's quota command.
 
 > ⚠️ **The 30-day scratch purge is automatic and irreversible.**  Set a calendar
 > reminder after every long job to move important outputs from `/scratch/$USER`
@@ -572,7 +588,7 @@ fi
 python train.py --data-dir $DATA_DIR
 ```
 
-<!-- Image prompt for slide:
+Image prompt for slide:
 "A vertical storage tier diagram for AICR. Four tiers stacked vertically:
 at the top '$TMPDIR (node-local)' labeled 'Fastest — copy data here at job
 start'; next '/scratch/$USER' labeled 'Good — 10 TB, 30-day purge, sequential
@@ -580,7 +596,6 @@ reads'; next '/work/neu/$PROJECT' labeled 'Moderate — long-term, purge-safe';
 at the bottom '/home/$USER' labeled 'Slowest — never train here, 100 GB
 quota'. Arrows on the right show data flow direction. Use a warm-to-cool
 color gradient from top (green) to bottom (red). Clean flat design."
--->
 
 **Avoid tiny-file datasets on `/scratch`.**  If your dataset consists of
 millions of small image files (e.g., ImageNet in JPEG format), the filesystem
@@ -590,7 +605,23 @@ enables large sequential reads:
 - **WebDataset** — tar-based streaming format, excellent for large vision datasets
 - **LMDB** — fast key-value store, common in older vision pipelines
 
-### 4.3 DataLoader Configuration — The Four Knobs
+-->
+
+### 4.2 DataLoader Configuration — The Four Knobs
+
+A **DataLoader** (PyTorch's `torch.utils.data.DataLoader`) is the component that
+feeds your model.  It takes a `Dataset` and handles the plumbing between disk and
+GPU: reading samples, collating them into batches, shuffling, and — crucially —
+doing this work on **CPU worker processes in parallel** so the next batch is
+ready before the GPU finishes the current one.
+
+Why it matters for utilization: a GPU can only train as fast as it is fed.  If
+data loading is serial (the default), the GPU sits idle waiting for each batch —
+this is the "data starvation" from Section 4.  
+
+The four knobs below control how
+aggressively the DataLoader prefetches and parallelises that work, and tuning
+them is usually the highest-leverage, lowest-effort fix for low GPU utilization.
 
 ```python
 from torch.utils.data import DataLoader
@@ -618,14 +649,16 @@ loader = DataLoader(
 > `num_workers=4` or higher.  This is a one-line change that often takes a job
 > from 20% GPU utilisation to 60–80% with no other code changes.
 
-> **Section 4 takeaway:** GPU utilisation below 60% almost always points to the
-> data pipeline.  Fix storage locality first (`$TMPDIR` or `/scratch`, never
-> `/home`).  Then fix DataLoader parameters (`num_workers`, `pin_memory`).
-> Neither requires changing your model code.
+> **Section 4 takeaway:** GPU utilization below 60% almost always points to the
+> data pipeline.  Fix DataLoader parameters (`num_workers`, `pin_memory`).
+> This does not require changing your model code.
+
+<!-- Storage-tier advice removed from takeaway (see commented Section 4.2):
+Fix storage locality first (`$TMPDIR` or `/scratch`, never `/home`). -->
 
 ---
 
-## Section 5: Memory vs Utilisation — Two Different Problems
+## Section 5: Memory vs Utilization — Two Different Problems
 
 *Two numbers on the nvidia-smi display that look similar and mean completely different things.*
 
@@ -737,12 +770,37 @@ model = convert_to_float8_training(model)
 FP8 is not covered in depth today.  Start with BF16 and contact the RC team if
 your workload is large enough to benefit from FP8.
 
-| Precision | When to use on AICR | Notes |
-|---|---|---|
-| FP32 | Debugging only | Slowest; baseline to compare against |
-| BF16 | **Default for all GPU training on AICR** | Same range as FP32, no scaler, best general choice |
-| FP16 | Avoid on Blackwell | Requires GradScaler; no advantage over BF16 here |
-| FP8 | Large LLMs on B200 | Further speedup; more setup required |
+| Precision | Bytes (exp/mantissa) | When to use on AICR | Key tradeoff |
+|---|---|---|---|
+| FP32 | 4 (8 / 23) | Debugging only | Full precision + range, but slowest and 2× the memory; baseline to compare against |
+| BF16 | 2 (8 / 7) | **Default for all GPU training on AICR** | Keeps FP32's range (no scaler) but coarse precision (~2–3 digits) — safe because master weights + reductions stay FP32 |
+| FP16 | 2 (5 / 10) | Avoid on Blackwell | More mantissa than BF16, but tiny exponent range → gradient underflow, needs GradScaler; no upside over BF16 here |
+| FP8 | 1 (4 / 3) | Large LLMs on B200 | Biggest speed/memory win, but coarse enough to hurt accuracy — needs per-tensor scaling, calibration, and higher-precision master weights |
+
+> **Tradeoffs in one line:** every step down the ladder trades **numerical
+> quality for speed and memory** — and it is not a simple "lower is better"
+> progression.  A few things worth keeping in mind:
+>
+> - **Range vs. precision.**  A 16-bit format must split its bits between
+>   exponent (range) and mantissa (precision).  BF16 keeps FP32's 8 exponent
+>   bits (so gradients don't underflow → no GradScaler), at the cost of
+>   precision.  FP16 makes the opposite bet: more precision, but a 5-bit
+>   exponent that underflows and *forces* loss scaling.  On Blackwell, BF16's
+>   bet is the right one.
+> - **"Mixed" precision is the safety net.**  BF16 training is only stable
+>   because the risky parts stay in FP32 — master weights, the loss, softmax,
+>   and layer/batch-norm reductions.  `autocast` handles this automatically;
+>   casting *everything* to BF16 would often diverge.
+> - **Memory savings are partial.**  BF16 roughly halves *activation* memory,
+>   but FP32 master weights + Adam optimizer states are unchanged, so total
+>   VRAM does not drop by a full 2×.
+> - **Speedup is op-dependent.**  The 2–4× applies to Tensor-Core matmuls and
+>   convolutions; memory-bound or elementwise ops see little benefit, and tiny
+>   models may be bottlenecked elsewhere entirely.
+> - **FP8 costs more than setup.**  Beyond `torchao`/`transformer_engine`
+>   plumbing, FP8 needs scaling/calibration and can measurably degrade accuracy
+>   on smaller models — which is why it only pays off when the model is large
+>   enough to amortize the loss in quality against the speed gain.
 
 ### 5.4 When Memory Is Still Too Tight — Gradient Checkpointing
 
@@ -793,7 +851,11 @@ Watch memory grow through the training loop and see the diagnostic hints.
 ---
 
 Multi-GPU training is often the first thing people reach for when a job is slow.
-It is frequently the wrong move.  Multi-GPU amplifies the efficiency you already
+
+
+It can also be the wrong move. 
+
+ Multi-GPU amplifies the efficiency you already
 have — it does not create it.
 
 On AICR this matters doubly.  Batch partitions are shared across **six
@@ -916,12 +978,14 @@ things simultaneously makes it impossible to know what helped.
 
 ### 7.2 Decision Guide
 
+<!-- Storage-tier steps removed from decision guide (see commented Section 4.2):
+     Data on /home or /scratch? Copy to $TMPDIR.
+     Millions of tiny files? Convert to HDF5 or WebDataset. -->
+
 ```
 GPU utilisation < 50%?
   ├─ Yes → Data pipeline (Section 4)
   │         num_workers=0? Fix that first.
-  │         Data on /home or /scratch? Copy to $TMPDIR.
-  │         Millions of tiny files? Convert to HDF5 or WebDataset.
   │
   └─ No (50–80%) → Check memory usage
         ├─ Memory < 40%  → Increase batch size (Section 5.2)
@@ -977,8 +1041,9 @@ Before submitting any GPU batch job, verify these items — ideally in a
 - [ ] `nvidia-smi` during a 50-step test shows utilisation > 70%
 - [ ] `num_workers` in DataLoader is NOT 0 — set to `cpus-per-task - 1`
 - [ ] `pin_memory=True` is set in DataLoader
-- [ ] Training data is NOT on `/home`
-- [ ] Scratch data has at least 2 weeks until the 30-day purge
+<!-- - [ ] Training data is NOT on `/home`
+- [ ] Scratch data has at least 2 weeks until the 30-day purge -->
+
 - [ ] Batch size uses at least 60% of available VRAM
 - [ ] BF16 autocast is enabled (`autocast(device_type='cuda', dtype=torch.bfloat16)`)
 - [ ] SLURM script requests the correct partition (`b200-batch` or `rtx-batch`)
@@ -1033,8 +1098,8 @@ from transformers import TrainingArguments
 args = TrainingArguments(
     bf16=True,                           # Section 5.3
     gradient_checkpointing=True,         # Section 5.4 (if needed)
-    dataloader_num_workers=8,            # Section 4.3
-    dataloader_pin_memory=True,          # Section 4.3
+    dataloader_num_workers=8,            # Section 4.2
+    dataloader_pin_memory=True,          # Section 4.2
     ...
 )
 ```
@@ -1052,8 +1117,8 @@ args = TrainingArguments(
 
 - Use the RTX PRO 6000 partition for smaller models; B200 for 70B+ models
 - Consider vLLM for high-throughput batch inference (covered in Workshop 3)
-- The storage tier advice (Section 4.2) applies to model weight loading:
-  load weights from `/scratch`, not `/home`
+<!-- - The storage tier advice (Section 4) applies to model weight loading:
+  load weights from `/scratch`, not `/home` -->
 
 ### Custom CUDA or Triton Kernels
 
@@ -1097,17 +1162,20 @@ Email the Research Computing team: [rchelp@northeastern.edu](mailto:rchelp@north
 | Username format | `j_smith_neu` (not `j.smith`) |
 | B200 VRAM | 192 GB per GPU |
 | RTX PRO 6000 VRAM | 96 GB per GPU |
-| Home quota | 100 GB |
-| Scratch quota | 10 TB |
-| Scratch purge | 30 days (automatic, irreversible) |
 | CUDA module | `cuda/13.1` |
 | Conda module | `miniforge3/25.3.0-3` |
 | Post-job efficiency | `jobstats <jobid>` |
 | Preferred precision | BF16 (`torch.bfloat16`) |
+
+<!-- Storage rows removed from reference table (see commented Section 4.2):
+| Home quota | 100 GB |
+| Scratch quota | 10 TB |
+| Scratch purge | 30 days (automatic, irreversible) |
 | Recommended data storage | `/scratch/$USER` or `$TMPDIR` (not `/home`) |
+-->
 
 ---
 
-*Workshop 2 of the AICR Training Series*
+<!--*Workshop 2 of the AICR Training Series*-->
 
 *For questions or support: [rchelp@northeastern.edu](mailto:rchelp@northeastern.edu)*

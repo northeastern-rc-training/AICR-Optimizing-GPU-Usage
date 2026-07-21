@@ -1,6 +1,6 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────────────────────
-#  AICR — Workshop 2 Environment Setup
+#  AICR Workshop on GPU Optimization - Environment Setup
 #  GPU Profiling and Optimization on AICR
 #
 #  Run this script ONCE on a b200-devel or rtx-devel node to create the conda
